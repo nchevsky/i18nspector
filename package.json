@@ -1,0 +1,68 @@
+{
+  "name": "i18nspector",
+  "version": "0.1.0",
+  "author": "Nick Chevsky",
+  "license": "BSD-2-Clause",
+  "description": "Checks i18next translations and application source code for broken references, orphaned strings, and missing translations.",
+  "keywords": [
+    "audit",
+    "check",
+    "g11n",
+    "globalization",
+    "i18next",
+    "internationalization",
+    "l10n",
+    "localization",
+    "references",
+    "verify"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nchevsky/i18nspector"
+  },
+  "type": "module",
+  "bin": "dist/index.js",
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "clean": "env-cmd cross-env-shell del-cli $DIST_PATH/*",
+    "make": "env-cmd cross-env-shell \"babel $SRC_PATH/ --extensions $EXTENSIONS --out-dir $DIST_PATH/ && del-cli $DIST_PATH/*.d.js\"",
+    "prepare": "husky install",
+    "prepublishOnly": "npm run clean && npm run make",
+    "test": "npm run test:lint && npm run test:unit",
+    "test:lint": "env-cmd cross-env-shell eslint --ext $EXTENSIONS . && tsc --noEmit",
+    "test:unit": "env-cmd cross-env-shell ENV=jest jest --coverage --roots=$SRC_PATH/"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.22.5",
+    "@types/jest": "^29.5.2",
+    "ast-types": "^0.16.1",
+    "bitumen": "^1.0.0",
+    "recast": "^0.23.2"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.21.5",
+    "@babel/core": "^7.22.1",
+    "@babel/eslint-parser": "^7.21.8",
+    "@babel/plugin-syntax-import-attributes": "^7.22.5",
+    "@babel/preset-env": "^7.22.4",
+    "@babel/preset-typescript": "^7.21.5",
+    "@typescript-eslint/eslint-plugin": "^5.59.9",
+    "@typescript-eslint/parser": "^5.59.8",
+    "cross-env": "^7.0.3",
+    "del-cli": "^5.0.0",
+    "env-cmd": "^10.1.0",
+    "eslint": "^8.42.0",
+    "eslint-import-resolver-babel-module": "^5.3.2",
+    "eslint-import-resolver-typescript": "^3.5.5",
+    "eslint-plugin-import": "npm:eslint-plugin-i@^2.27.5",
+    "eslint-plugin-jest": "^27.2.1",
+    "husky": "^8.0.3",
+    "jest": "^29.5.0",
+    "typescript": "^5.0.4"
+  },
+  "babel": {
+    "extends": "bitumen/configuration/babel"
+  }
+}

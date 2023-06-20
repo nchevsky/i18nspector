@@ -1,0 +1,6 @@
+{
+  "extends": "bitumen/configuration/typescript",
+  // `exclude`, `files`, and `include` paths are relative to their originating tsconfig.json (i.e. bitumen's)
+  // and must therefore be overridden locally; see https://github.com/microsoft/TypeScript/issues/45050
+  "include": ["./src/"]
+}

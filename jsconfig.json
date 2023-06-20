@@ -1,0 +1,3 @@
+{
+  "extends": "bitumen/configuration/javascript"
+}
