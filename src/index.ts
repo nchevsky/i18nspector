@@ -9,7 +9,7 @@ const options = {
   baseLanguageTag: 'en',
   checkForOrphanedStrings: true,
   checkForUntranslatedStrings: true,
-  resourceExtensions: ['.json'],
+  resourceExtensions: ['.json', '.jsonc'],
   resourcePaths: new Array<string>(),
   sourceCodeExtensions: ['.js', '.jsx', '.ts', '.tsx'],
   sourceCodePaths: new Array<string>(),
@@ -57,7 +57,7 @@ for (const argument of process.argv.slice(2)) {
 }
 
 // display help if no paths were given
-if (!options.resourcePaths.length || !options.sourceCodePaths.length) { // TODO
+if (!options.resourcePaths.length || !options.sourceCodePaths.length) {
   console.log(`npx i18nspector --resourcePaths=<path>,… [--resourceExtensions=<extension>,…]
                 --sourceCodePaths=<path>,… [--sourceCodeExtensions=<extension>,…]
                 [--reportOrphanedStrings=<no|yes>] [--reportUntranslatedStrings=<no|yes>]
@@ -65,7 +65,7 @@ if (!options.resourcePaths.length || !options.sourceCodePaths.length) { // TODO
 
             --resourcePaths: Comma-separated list of paths to recursively scan for translations.
        --resourceExtensions: Comma-separated list of translation file name extensions to process.
-                             Defaults to '.json'.
+                             Defaults to '.json,.jsonc'.
 
           --sourceCodePaths: Comma-separated list of paths to recursively scan for source code.
      --sourceCodeExtensions: Comma-separated list of source code file name extensions to process.
@@ -131,7 +131,7 @@ for (const resource of resources.values()) {
   if (resource.definitions.size) definedResources.push(resource);
   // check for orphaned strings
   if (options.checkForOrphanedStrings && !haveBlockingSourceCodeProblems
-    && !resource.references.length && !isInOptionalResourcePath(resource)) {
+    && !resource.isIgnored && !resource.references.length && !isInOptionalResourcePath(resource)) {
     orphanedResources.push(resource);
   }
   // check for untranslated strings

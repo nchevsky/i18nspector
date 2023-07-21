@@ -1,7 +1,9 @@
 import type {Dirent} from 'node:fs';
 import {readFile, readdir} from 'node:fs/promises';
 
-import {directoryEntries, escapeForRegExp, log, nameMatchesExtensions, pluralize} from './misc.js';
+import {visit} from 'jsonc-parser';
+
+import {IGNORE_DIRECTIVE, directoryEntries, escapeForRegExp, log, nameMatchesExtensions, pluralize} from './misc.js';
 import {options} from '../index.js';
 import Resource from '../models/Resource.js';
 
@@ -17,28 +19,85 @@ interface Node { // eslint-disable-line @typescript-eslint/consistent-indexed-ob
 type Value = Array<Value> | Node | boolean | number | null | string;
 
 async function parseResourceFile(filePath: string, context: Context) {
+  log(`\t🔍  Parsing resource file ${filePath}`, 'debug');
+
+  /** Current object nesting depth. */
+  let depth = 0;
+  /** Raw contents of the resource file. */
+  const document = (await readFile(filePath)).toString();
+  /** If < ∞, we're inside an object with an `ignore` directive and ignoring everything within. */
+  let ignoreDepth = Number.POSITIVE_INFINITY;
+  /** If ≠ -1, this line has an `ignore` directive. */
+  let ignoreLineNumber = -1;
+  /** If `true`, we've encountered an `ignore-begin` directive and are ignoring everything until `ignore-end`. */
+  let ignoreUntilEndDirective = false;
+  /** If ≠ -1, an object opening brace was encountered on this line. */
+  let objectStartLineNumber = -1;
+  /** Resources processed so far. */
   const resources = new Array<Resource>();
 
-  function processNode(node: Node, parentKey = '') {
-    for (const [nodeKey, nodeValue] of Object.entries(node)) {
-      const resourceKey = `${parentKey}${parentKey ? '.' : ''}${nodeKey}`;
+  visit(document, {
+    onComment(offset, length, startLine, startCharacter) {
+      if (depth >= ignoreDepth) return; // if we're already within an ignored object, bail
 
-      // if the value is an object, descend into it
-      if (typeof nodeValue == 'object' && nodeValue !== null && !Array.isArray(nodeValue)) {
-        processNode(nodeValue, resourceKey);
-      // otherwise, add the value as a translation
-      } else {
-        const resource = context.resources.get(resourceKey)
-          ?? context.resources.set(resourceKey, new Resource(resourceKey)).get(resourceKey)!;
-        resource.definitions.set(context.languageTag, filePath);
-        resource.translations.set(context.languageTag, nodeValue);
-        resources.push(resource);
+      const match = new RegExp(`[*/]\\s*(?<value>(${IGNORE_DIRECTIVE}-(begin|end))|${IGNORE_DIRECTIVE})(\\*|\\s|$)`)
+        .exec(document.substring(offset, offset + length)); // includes delimiters and leading/trailing whitespace
+      switch (match?.groups?.value) {
+        case IGNORE_DIRECTIVE:
+          ignoreLineNumber = startLine;
+          // if an object's opening brace was previously found on this line, ignore everything within
+          if (startLine == objectStartLineNumber) {
+            ignoreDepth = depth;
+          // if a resource was previously found on this line, mark it as ignored
+          } else {
+            const resource = resources[resources.length - 1];
+            if (resource.definitions.get(context.languageTag)?.endsWith(`:${startLine + 1}`)) resource.isIgnored = true;
+          }
+          break;
+        case `${IGNORE_DIRECTIVE}-begin`:
+          ignoreUntilEndDirective = true;
+          break;
+        case `${IGNORE_DIRECTIVE}-end`:
+          ignoreUntilEndDirective = false;
+          break;
       }
-    }
-  }
+    },
 
-  log(`\t🔍  Parsing resource file ${filePath}`, 'debug');
-  processNode(JSON.parse((await readFile(filePath)).toString()));
+    onLiteralValue(value, offset, length, startLine, startCharacter, pathSupplier) {
+      const path = pathSupplier();
+      const lastSegment = path[path.length - 1];
+      if (typeof lastSegment == 'string') {
+        const match = lastSegment.match(/(?<baseKey>.+)_(one|other)$/);
+        if (match) path.splice(-1, 1, match.groups!.baseKey);
+      }
+
+      const resourceKey = path.join('.');
+
+      const resource = context.resources.get(resourceKey)
+        ?? context.resources.set(resourceKey, new Resource(resourceKey)).get(resourceKey)!;
+      resource.definitions.set(context.languageTag, `${filePath}:${startLine + 1}`);
+      resource.isIgnored = resource.isIgnored // once `true`, always `true` for all languages and variations
+        || depth >= ignoreDepth // within an ignored object
+        || startLine == ignoreLineNumber // following an `ignore` line directive
+        || ignoreUntilEndDirective; // between `ignore-begin` and `ignore-end` block directives
+      resource.translations.set(context.languageTag, value);
+      resources.push(resource);
+    },
+
+    onObjectBegin(offset, length, startLine, startCharacter, pathSupplier) {
+      depth++;
+      objectStartLineNumber = startLine;
+      // if there was an `ignore` directive on this line, start ignoring everything within this object
+      if (startLine == ignoreLineNumber) ignoreDepth = depth;
+    },
+
+    onObjectEnd(offset, length, startLine, startCharacter) {
+      depth--;
+      // if we were inside an ignored object and have just come out, stop ignoring
+      if (depth < ignoreDepth) ignoreDepth = Number.POSITIVE_INFINITY;
+    }
+  });
+
   log(`\t\t🌐  ${resources.length} '${context.languageTag}' ${pluralize(resources.length, 'translation')}`, 'debug');
 
   return resources;
@@ -50,28 +109,33 @@ export async function findBaseLanguage(directoryPath: string): Promise<
   log(`📂  Searching for base language ('${options.baseLanguageTag}') in ${directoryPath}`, 'debug');
 
   const directoryEntries = await readdir(directoryPath, {withFileTypes: true});
+  const extensionRegExp = options.resourceExtensions.map((extension) => escapeForRegExp(extension)).join('|');
 
   // attempt a breadth-first search
   for (const directoryEntry of directoryEntries) {
     if ((!directoryEntry.isDirectory() || directoryEntry.name == 'node_modules') && !directoryEntry.isFile()) continue;
 
     // if the name of this directory or file contains the base language tag
-    const match = new RegExp(`\\b(${options.baseLanguageTag})\\b${directoryEntry.isFile()
-      ? `.*(?:${options.resourceExtensions.map((extension) => escapeForRegExp(extension)).join('|')})`
-      : ''}$`, 'd').exec(directoryEntry.name);
-    if (match?.indices) {
+    // - tags in directory names: *<options.baseLanguageTag>.<options.resourceExtensions>
+    // - tags in file names:      *<options.baseLanguageTag>
+    const match = new RegExp([
+      '^(?<name>.*)',
+      `\\b${options.baseLanguageTag}\\b`,
+      directoryEntry.isFile() ? `.*(${extensionRegExp})` : '',
+      '$'
+    ].join('')).exec(directoryEntry.name);
+    if (match?.groups) {
       const path = `${directoryPath}/${directoryEntry.name}`;
       log(`<tab>✔️   Found '${options.baseLanguageTag}' base language at ${path}.`);
 
       // derive a regular expression that will match other language tags in the same path
-      // - tags in directory names: 'en/translations.json'     → '*/translations.json'
-      // - tags in file names:      'translations/foo-en.json' → 'translations/foo-*.json'
-      const [, [languageTagBeginIndex, languageTagEndIndex]] = match.indices;
+      // - tags in directory names: 'en/translations.jsonc'    → '*/translations.<options.resourceExtensions>'
+      // - tags in file names:      'translations/foo-en.json' → 'translations/foo-*.<options.resourceExtensions>'
       const regularExpression = new RegExp([
         '^',
-        escapeForRegExp(directoryEntry.name.substring(0, languageTagBeginIndex)),
+        escapeForRegExp(match.groups.name),
         '\\b(?<languageTag>[-0-9A-Za-z]{2,})\\b',
-        escapeForRegExp(directoryEntry.name.substring(languageTagEndIndex)),
+        directoryEntry.isFile() ? `(?:${extensionRegExp})` : '',
         '$'
       ].join(''));
 
@@ -101,7 +165,8 @@ export async function processResourceFiles(
 
     const resources = await parseResourceFile(filePath, {languageTag, resources: context.resources});
     if (options.verbose == 1) {
-      log(`🌐  Found ${resources.length} '${languageTag}' ${pluralize(resources.length, 'string')} in ${filePath}.`);
+      log(`🌐  Found ${resources.length} '${languageTag}' ${
+        pluralize(resources.length, 'translation')} in ${filePath}.`);
     }
   };
 

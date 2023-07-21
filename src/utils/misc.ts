@@ -3,6 +3,8 @@ import {readdir} from 'node:fs/promises';
 
 import {options} from '../index.js';
 
+export const IGNORE_DIRECTIVE = 'i18nspector-ignore';
+
 export async function directoryEntries(directoryPath: string) {
   function filesBeforeDirectories(a: Dirent, b: Dirent) {
     return a.isFile() && b.isDirectory()

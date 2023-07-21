@@ -19,7 +19,8 @@ TypeScript and JavaScript with JSX are supported.
 - No aliased `t()` functions
 - No `Trans` components
 - No dynamic expressions in key references
-- No key prefixes or multiple namespaces
+- No multiple namespaces
+- No key prefixes
 
 ```js
 import {i18n} from 'i18next';
@@ -55,19 +56,19 @@ t('FOO'.toLowerCase());    // ❌ dynamic expression
 ```
 ## Translations
 
-JSON resource files are supported when organized in either of the following ways.
+JSON and JSONC resource files are supported when organized in either of the following ways.
 
 - Files with names ending in IETF language tags, located in a directory with any name:
   ```
   📂 foo
-     📄 en.json
+     📄 en.jsonc
      📄 fr.json
      …
   ```
 - Files with any name located in directories with names ending in IETF language tags:
   ```
   📂 en
-     📄 foo.json
+     📄 foo.jsonc
   📂 fr
      📄 bar.json
   …
@@ -83,7 +84,7 @@ $ npx i18nspector --resourcePaths=<path>,… [--resourceExtensions=<extension>,�
 
             --resourcePaths: Comma-separated list of paths to recursively scan for translations.
        --resourceExtensions: Comma-separated list of translation file name extensions to process.
-                             Defaults to '.json'.
+                             Defaults to '.json,.jsonc'.
 
           --sourceCodePaths: Comma-separated list of paths to recursively scan for source code.
      --sourceCodeExtensions: Comma-separated list of source code file name extensions to process.
@@ -105,66 +106,115 @@ $ npx i18nspector --resourcePaths=<path>,… [--resourceExtensions=<extension>,�
 
 # Examples
 
-📍 `./examples/translations/en.json`
-```json
+📍 `./examples/translations/en.jsonc`
+```jsonc
 {
   "bar": "Bar",
-  "foo": "Foo"
+  "foo": "Foo",
+  /* i18nspector-ignore-begin */
+  "ignoredBlockLine1": "ignored",
+  "ignoredBlockLine2": "ignored",
+  /* i18nspector-ignore-end */
+  "ignoredLine": "ignored", // i18nspector-ignore
+  "ignoredObject": { // i18nspector-ignore
+    "bar": "ignored",
+    "foo": {
+      "qux": "ignored"
+    }
+  }
 }
 ```
+
+💡 Strings tagged with `i18nspector-ignore` directives are exempt from reference checking and won't be reported as orphaned when no references to them can be found in source code.
 
 📍 `./examples/translations/ko.json`
 ```json
 {
-  "bar": "바"
+  "bar": "바",
+  "foo": "푸"
 }
 ```
 
-## Example # 1: Bad strings
+## Untranslated, orphaned, and unknown strings
 
 📍 `./examples/src/bad-strings/index.js`
 ```js
+t('baz');
 t('foo');
-t('unknown');
+t('ignored' /* i18nspector-ignore */);
 ```
+
+💡 String references tagged with `i18nspector-ignore` directives are exempt from reference checking and won't be reported as unknown when not found in resource files.
 
 ```
 $ npx i18nspector --resourcePaths=./examples/translations \
-                  --sourceCodePaths=./examples/src/bad-strings
+                  --sourceCodePaths=./examples/src/bad-strings --verbose=2
 
-🌐 Inspected 2 strings, translations in 2 languages, and references in 1 source code file.
+📂  Searching for base language ('en') in ./examples/translations
+        ✔️  Found 'en' base language at ./examples/translations/en.jsonc.
+
+📂  Searching for .json, .jsonc resources in ./examples/translations
+        🔍  Parsing resource file ./examples/translations/en.jsonc
+                🌐  7 'en' translations
+        🔍  Parsing resource file ./examples/translations/ko.json
+                🌐  1 'ko' translation
+
+📂  Searching for .js, .jsx, .ts, .tsx source code in ./examples/src/bad-strings
+        🔍  Parsing source code file ./examples/src/bad-strings/index.js
+                ❌ Reference to unknown string 'baz' at ./examples/src/bad-strings/index.js:1
+                🔗 Reference to known string 'foo' at ./examples/src/bad-strings/index.js:2
+
+🌐  Inspected 7 strings, translations in 2 languages, and references in 1 source code file.
 
 Untranslated strings:
-        🟡 'foo' (ko)
+        🟡 'ignoredBlockLine1' (ko)
+        🟡 'ignoredBlockLine2' (ko)
+        🟡 'ignoredLine' (ko)
+        🟡 'ignoredObject.bar' (ko)
+        🟡 'ignoredObject.foo.qux' (ko)
 
 Orphaned strings:
         🟠 'bar'
 
 Source code problems:
-        🔴 Reference to unknown string 'unknown' at examples/src/bad-strings/index.js:2
+        🔴 Reference to unknown string 'baz' at ./examples/src/bad-strings/index.js:1
 ```
 
-## Example # 2: Unsupported dynamic expression
+## Unsupported dynamic expressions
 
-📍 `./examples/src/dynamic-expression/index.js`
+📍 `./examples/src/dynamic-expressions/index.js`
 ```js
 const key = 'foo';
 
+t('foo' + 'bar');
+t('ignored'.toUpperCase()); // i18nspector-ignore
 t(key);
 ```
 
+💡 `t()` calls tagged with `i18nspector-ignore` directives are exempt from analysis and won't be reported as unsupported if they contain dynamic expressions.
+
 ```
 $ npx i18nspector --resourcePaths=./examples/translations \
-                  --sourceCodePaths=./examples/src/dynamic-expression
+                  --sourceCodePaths=./examples/src/dynamic-expressions --verbose=1
 
-🌐 Inspected 2 strings, translations in 2 languages, and references in 1 source code file.
+✔️  Found 'en' base language at ./examples/translations/en.jsonc.
+
+🌐  Found 7 'en' translations in ./examples/translations/en.jsonc.
+🌐  Found 1 'ko' translation in ./examples/translations/ko.json.
+
+🌐  Inspected 7 strings, translations in 2 languages, and references in 1 source code file.
 
 Untranslated strings:
-        🟡 'foo' (ko)
+        🟡 'ignoredBlockLine1' (ko)
+        🟡 'ignoredBlockLine2' (ko)
+        🟡 'ignoredLine' (ko)
+        🟡 'ignoredObject.bar' (ko)
+        🟡 'ignoredObject.foo.qux' (ko)
 
 Orphaned strings:
-        ⚠️ String references cannot be analyzed until ⛔-marked source code problems are resolved.
+        ⚠️  String references cannot be analyzed until ⛔-marked source code problems are resolved.
 
 Source code problems:
-        ⛔ Non-literal of type `CallExpression` at examples/src/dynamic-expression/index.js:3
+        ⛔ Non-literal of type `BinaryExpression` at ./examples/src/dynamic-expressions/index.js:3
+        ⛔ Non-literal of type `Identifier` at ./examples/src/dynamic-expressions/index.js:4
 ```

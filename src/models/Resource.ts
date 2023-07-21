@@ -4,6 +4,7 @@ export type Translation = Array<any> | boolean | null | number | string;
 
 export default class Resource implements Comparable {
   definitions = new Map<string, string>();
+  isIgnored = false;
   key: string;
   references = new Array<string>();
   translations = new Map<string, Translation>();

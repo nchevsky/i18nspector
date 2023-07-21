@@ -2,10 +2,13 @@ import {readFile} from 'node:fs/promises';
 
 import {builders, type namedTypes as ASTTypes, visit} from 'ast-types';
 import type * as ASTKinds from 'ast-types/lib/gen/kinds'; // eslint-disable-line import/no-namespace
+import type {NodePath} from 'ast-types/lib/node-path';
 import {parse} from 'recast';
 import parser from 'recast/parsers/babel-ts.js';
 
-import {directoryEntries, formatCount, log, nameMatchesExtensions, permutate, pluralize} from './misc.js';
+import {
+  IGNORE_DIRECTIVE, directoryEntries, formatCount, log, nameMatchesExtensions, permutate, pluralize
+} from './misc.js';
 import {options} from '../index.js';
 import Resource from '../models/Resource.js';
 
@@ -20,6 +23,28 @@ async function parseSourceCodeFile(filePath: string, context: {resources: Map<st
 
   function formatLocation(node: ASTTypes.Node) {
     return `${filePath}:${node.loc?.start.line ?? '?'}`;
+  }
+
+  function isIgnored(nodePath: NodePath) {
+    const hasIgnoreDirective = (node: ASTTypes.Node) => {
+      const isIgnoreDirective = (comment: ASTKinds.CommentKind) => comment.value.trim() == IGNORE_DIRECTIVE;
+      return !!node.comments?.some(isIgnoreDirective) || !!node.trailingComments?.some(isIgnoreDirective);
+    };
+    const isCallExpression = (node: ASTTypes.Node): node is ASTTypes.CallExpression => node.type == 'CallExpression';
+
+    // if this is a call expression, check the first argument (e.g. `t('foo' /* ignore */)`)
+    if (isCallExpression(nodePath.node)) {
+      const firstArgument = nodePath.node.arguments.at(0);
+      if (firstArgument && hasIgnoreDirective(firstArgument)) return true;
+    }
+
+    // check the node itself (e.g. `/* ignore */ t('foo')`)
+    if (hasIgnoreDirective(nodePath.node)) return true;
+
+    // recursively check the node's parents (e.g. `const foo = t('foo'); // ignore`)
+    if (nodePath.parent) return isIgnored(nodePath.parent);
+
+    return false;
   }
 
   function processNode(node: ASTTypes.Node) {
@@ -97,8 +122,10 @@ async function parseSourceCodeFile(filePath: string, context: {resources: Map<st
       const isObjectProperty = (node: ASTTypes.Node): node is ASTTypes.ObjectProperty => node.type == 'ObjectProperty';
       const isStringLiteral = (node: ASTTypes.Node): node is ASTTypes.StringLiteral => node.type == 'StringLiteral';
 
-      if ((isIdentifier(callee) && callee.name == 't') // t()
-        || (isMemberExpression(callee) && isIdentifier(callee.property) && callee.property.name == 't')) { // foo.t()
+      if ((
+        (isIdentifier(callee) && callee.name == 't') // t()
+          || (isMemberExpression(callee) && isIdentifier(callee.property) && callee.property.name == 't') // foo.t()
+      ) && !isIgnored(nodePath)) {
         const {nonLiteralExpressions, stringLiterals} = processNode(call.arguments[0]);
 
         nonLiteralExpressions.forEach((node) =>
@@ -108,7 +135,7 @@ async function parseSourceCodeFile(filePath: string, context: {resources: Map<st
           const key = stringLiteral.value;
           let resource = context.resources.get(key);
 
-          if (resource) {
+          if (resource?.definitions.size) {
             log(`\t\t🔗 Reference to known string '${key}' at ${formatLocation(stringLiteral)}`, 'debug');
           } else {
             addProblem(`Reference to unknown string '${key}' at ${formatLocation(stringLiteral)}`, false);
