@@ -56,12 +56,13 @@ t('FOO'.toLowerCase());    // ❌ dynamic expression
 ```
 ## Translations
 
-JSON and JSONC resource files are supported when organized in either of the following ways.
+JSON, JSONC, and `.properties` resource files are supported when organized in either of the following ways.
 
 - Files with names ending in IETF language tags, located in a directory with any name:
   ```
   📂 foo
      📄 en.jsonc
+     📄 es.properties
      📄 fr.json
      …
   ```
@@ -69,8 +70,10 @@ JSON and JSONC resource files are supported when organized in either of the foll
   ```
   📂 en
      📄 foo.jsonc
+  📂 es
+     📄 bar.properties
   📂 fr
-     📄 bar.json
+     📄 baz.json
   …
   ```
 
@@ -84,7 +87,7 @@ $ npx i18nspector --resourcePaths=<path>,… [--resourceExtensions=<extension>,�
 
             --resourcePaths: Comma-separated list of paths to recursively scan for translations.
        --resourceExtensions: Comma-separated list of translation file name extensions to process.
-                             Defaults to '.json,.jsonc'.
+                             Defaults to '.json,.jsonc,.properties'.
 
           --sourceCodePaths: Comma-separated list of paths to recursively scan for source code.
      --sourceCodeExtensions: Comma-separated list of source code file name extensions to process.

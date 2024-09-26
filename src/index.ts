@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
-import type Resource from './models/Resource.js';
-import {formatCount, log} from './utils/misc.js';
-import {findBaseLanguage, processResourceFiles} from './utils/resources.js';
-import {processSourceCodeFiles} from './utils/source-code.js';
+import type Resource from './models/Resource.ts';
+import {formatCount, log} from './utils/misc.ts';
+import {FILE_EXTENSIONS, findBaseLanguage, processResourceFiles} from './utils/resources.ts';
+import {processSourceCodeFiles} from './utils/source-code.ts';
 
 const options = {
   baseLanguageTag: 'en',
   checkForOrphanedStrings: true,
   checkForUntranslatedStrings: true,
-  resourceExtensions: ['.json', '.jsonc'],
+  resourceExtensions: FILE_EXTENSIONS.slice() as Array<string>,
   resourcePaths: new Array<string>(),
   sourceCodeExtensions: ['.js', '.jsx', '.ts', '.tsx'],
   sourceCodePaths: new Array<string>(),
@@ -24,8 +24,9 @@ const sourceCodeProblems: Parameters<typeof processSourceCodeFiles>[1]['problems
 // process command-line arguments
 for (const argument of process.argv.slice(2)) {
   const argumentValue = argument.split('=')[1];
-  const argumentValueList = () =>
-    argumentValue.split(',').filter((element) => Boolean(element.trim()));
+  if (!argumentValue) continue;
+
+  const argumentValueList = () => argumentValue.split(',').filter((element) => Boolean(element.trim()));
 
   if (argument.startsWith('--baseLanguage=')) {
     options.baseLanguageTag = argumentValue;
@@ -65,7 +66,7 @@ if (!options.resourcePaths.length || !options.sourceCodePaths.length) {
 
             --resourcePaths: Comma-separated list of paths to recursively scan for translations.
        --resourceExtensions: Comma-separated list of translation file name extensions to process.
-                             Defaults to '.json,.jsonc'.
+                             Defaults to '.json,.jsonc,.properties'.
 
           --sourceCodePaths: Comma-separated list of paths to recursively scan for source code.
      --sourceCodeExtensions: Comma-separated list of source code file name extensions to process.
@@ -122,8 +123,10 @@ const haveBlockingSourceCodeProblems = sourceCodeProblems.reduce((count, problem
   (count += +problem.precludesStaticAnalysis), 0);
 
 // analyze resources
-const isInOptionalResourcePath = (resource: Resource) => optionalResourcePaths
-  .some((optionalResourcePath) => resource.definitions.values().next().value.startsWith(optionalResourcePath));
+const isInOptionalResourcePath = (resource: Resource) => optionalResourcePaths.some((optionalResourcePath) => {
+  const definition = resource.definitions.values().next();
+  return !definition.done && definition.value.startsWith(optionalResourcePath);
+});
 const definedResources = new Array<Resource>();
 const orphanedResources = new Array<Resource>();
 const untranslatedResources = new Array<{missingLanguageTags: Array<string>, resource: Resource}>();

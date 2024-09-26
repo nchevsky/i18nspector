@@ -1,7 +1,7 @@
 import type {Dirent} from 'node:fs';
 import {readdir} from 'node:fs/promises';
 
-import {options} from '../index.js';
+import {options} from '../index.ts';
 
 export const IGNORE_DIRECTIVE = 'i18nspector-ignore';
 
@@ -55,7 +55,7 @@ export function nameMatchesExtensions(fileName: string, extensions: Array<string
 export function permutate<Element>(entries: Array<Array<Element>>, precursors: typeof entries[0] = []) {
   const permutations: Array<Array<Element>> = [];
 
-  for (const value of entries[precursors.length]) {
+  for (const value of entries[precursors.length]!) {
     const permutation = [...precursors, value];
     if (precursors.length == entries.length - 1) {
       permutations.push(permutation);

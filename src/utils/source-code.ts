@@ -1,16 +1,16 @@
 import {readFile} from 'node:fs/promises';
 
-import {builders, type namedTypes as ASTTypes, visit} from 'ast-types';
-import type * as ASTKinds from 'ast-types/lib/gen/kinds'; // eslint-disable-line import/no-namespace
+import {type ASTNode, type namedTypes as ASTTypes, builders, visit} from 'ast-types';
+import type * as ASTKinds from 'ast-types/lib/gen/kinds'; // eslint-disable-line import-x/no-namespace
 import type {NodePath} from 'ast-types/lib/node-path';
 import {parse} from 'recast';
-import parser from 'recast/parsers/babel-ts.js';
+import parser from 'recast/parsers/babel-ts.js'; // eslint-disable-line import-x/default
 
 import {
   IGNORE_DIRECTIVE, directoryEntries, formatCount, log, nameMatchesExtensions, permutate, pluralize
-} from './misc.js';
-import {options} from '../index.js';
-import Resource from '../models/Resource.js';
+} from './misc.ts';
+import {options} from '../index.ts';
+import Resource from '../models/Resource.ts';
 
 async function parseSourceCodeFile(filePath: string, context: {resources: Map<string, Resource>}) {
   const problems = new Array<{description: string, precludesStaticAnalysis: boolean}>();
@@ -25,7 +25,7 @@ async function parseSourceCodeFile(filePath: string, context: {resources: Map<st
     return `${filePath}:${node.loc?.start.line ?? '?'}`;
   }
 
-  function isIgnored(nodePath: NodePath) {
+  function isIgnored(nodePath: NodePath<ASTTypes.Node>) {
     const hasIgnoreDirective = (node: ASTTypes.Node) => {
       const isIgnoreDirective = (comment: ASTKinds.CommentKind) => comment.value.trim() == IGNORE_DIRECTIVE;
       return !!node.comments?.some(isIgnoreDirective) || !!node.trailingComments?.some(isIgnoreDirective);
@@ -42,7 +42,7 @@ async function parseSourceCodeFile(filePath: string, context: {resources: Map<st
     if (hasIgnoreDirective(nodePath.node)) return true;
 
     // recursively check the node's parents (e.g. `const foo = t('foo'); // ignore`)
-    if (nodePath.parent) return isIgnored(nodePath.parent);
+    if (nodePath.parent) return isIgnored(nodePath.parent as NodePath<ASTTypes.Node>);
 
     return false;
   }
@@ -109,23 +109,26 @@ async function parseSourceCodeFile(filePath: string, context: {resources: Map<st
 
   log(`\t🔍  Parsing source code file ${filePath}`, 'debug');
 
-  visit(parse((await readFile(filePath)).toString(), {parser, sourceFileName: filePath}), {
+  visit(parse((await readFile(filePath)).toString(), {parser, sourceFileName: filePath}) as ASTNode, {
     visitCallExpression(nodePath) {
+      if (isIgnored(nodePath)) return false;
+
       const call = nodePath.node;
       const callee = call.callee;
 
-      const isIdentifier = (node: ASTTypes.Node): node is ASTTypes.Identifier => node.type == 'Identifier';
-      const isMemberExpression = (node: ASTTypes.Node): node is ASTKinds.MemberExpressionKind =>
-        node.type == 'MemberExpression';
-      const isObjectExpression = (node: ASTTypes.Node): node is ASTTypes.ObjectExpression =>
-        node.type == 'ObjectExpression';
-      const isObjectProperty = (node: ASTTypes.Node): node is ASTTypes.ObjectProperty => node.type == 'ObjectProperty';
-      const isStringLiteral = (node: ASTTypes.Node): node is ASTTypes.StringLiteral => node.type == 'StringLiteral';
+      const isIdentifier = (node?: ASTTypes.Node): node is ASTTypes.Identifier => node?.type == 'Identifier';
+      const isMemberExpression = (node?: ASTTypes.Node): node is ASTKinds.MemberExpressionKind =>
+        node?.type == 'MemberExpression';
+      const isObjectExpression = (node?: ASTTypes.Node): node is ASTTypes.ObjectExpression =>
+        node?.type == 'ObjectExpression';
+      const isObjectProperty = (node?: ASTTypes.Node): node is ASTTypes.ObjectProperty =>
+        node?.type == 'ObjectProperty';
+      const isStringLiteral = (node?: ASTTypes.Node): node is ASTTypes.StringLiteral => node?.type == 'StringLiteral';
 
       if ((
         (isIdentifier(callee) && callee.name == 't') // t()
           || (isMemberExpression(callee) && isIdentifier(callee.property) && callee.property.name == 't') // foo.t()
-      ) && !isIgnored(nodePath)) {
+      ) && call.arguments[0]) {
         const {nonLiteralExpressions, stringLiterals} = processNode(call.arguments[0]);
 
         nonLiteralExpressions.forEach((node) =>
@@ -146,16 +149,16 @@ async function parseSourceCodeFile(filePath: string, context: {resources: Map<st
           referencedResources.add(resource);
           resource.references.push(formatLocation(stringLiteral));
         });
-      } else if (isIdentifier(callee) && callee.name == 'useTranslation' && call.arguments.length) { // useTranslation()
+      } else if (isIdentifier(callee) && callee.name == 'useTranslation') { // useTranslation()
         const namespaceArgument = call.arguments[0];
-        if (!isStringLiteral(namespaceArgument) || namespaceArgument.value) {
+        if (namespaceArgument) {
           addProblem(`Unsupported namespace at ${formatLocation(namespaceArgument)}`, true);
         }
 
         const optionsArgument = call.arguments[1];
         if (isObjectExpression(optionsArgument) && optionsArgument.properties.some((property) =>
           isObjectProperty(property) && isIdentifier(property.key) && property.key.name == 'keyPrefix')) {
-          addProblem(`Unsupported key prefix at ${formatLocation(namespaceArgument)}`, true);
+          addProblem(`Unsupported key prefix at ${formatLocation(optionsArgument)}`, true);
         }
       }
 
@@ -166,7 +169,7 @@ async function parseSourceCodeFile(filePath: string, context: {resources: Map<st
   return {problems, referencedResources};
 }
 
-export async function processSourceCodeFiles( // eslint-disable-line import/prefer-default-export
+export async function processSourceCodeFiles( // eslint-disable-line import-x/prefer-default-export
   directoryPath: string,
   context: {problems: Awaited<ReturnType<typeof parseSourceCodeFile>>['problems'], resources: Map<string, Resource>}
 ) {
