@@ -1,6 +1,6 @@
 {
   "name": "i18nspector",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Nick Chevsky",
   "license": "BSD-2-Clause",
   "description": "Checks i18next translations and application source code for broken references, orphaned strings, and missing translations.",
@@ -26,12 +26,12 @@
     "dist/"
   ],
   "scripts": {
-    "clean": "env-cmd cross-env-shell del-cli $DIST_PATH/*",
-    "make": "env-cmd cross-env-shell \"babel $SRC_PATH/ --extensions $EXTENSIONS --out-dir $DIST_PATH/ && del-cli $DIST_PATH/*.d.js\"",
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true});",
+    "make": "babel src/ --extensions .cjs,.cts,.js,.jsx,.ts,.tsx --out-dir dist/",
     "prepare": "husky",
     "prepublishOnly": "npm run clean && npm run make",
     "test": "npm run test:lint && npm run test:unit",
-    "test:lint": "eslint --ignore-path .gitignore . && tsc --noEmit",
+    "test:lint": "eslint --ignore-path .gitignore . && tsc --emitDeclarationOnly false --noEmit",
     "test:unit": "vitest"
   },
   "engines": {
@@ -40,28 +40,24 @@
   "dependencies": {
     "@babel/parser": "^7.22.7",
     "ast-types": "^0.16.1",
-    "bitumen": "^3.1.0",
+    "bitumen": "^3.3.0",
     "jsonc-parser": "^3.3.1",
-    "properties-file": "^3.5.7",
-    "recast": "^0.23.9"
+    "properties-file": "^3.5.12",
+    "recast": "^0.23.11"
   },
   "devDependencies": {
-    "@babel/cli": "^7.25.6",
-    "@babel/core": "^7.22.9",
-    "@babel/plugin-syntax-import-attributes": "^7.22.5",
-    "@babel/preset-env": "^7.22.9",
-    "@babel/preset-typescript": "^7.21.5",
-    "@types/node": "^22.7.3",
-    "@vitest/coverage-istanbul": "^2.1.1",
-    "cross-env": "^7.0.3",
-    "del-cli": "^5.1.0",
-    "env-cmd": "^10.1.0",
+    "@babel/cli": "^7.27.0",
+    "@babel/core": "^7.26.10",
+    "@babel/preset-env": "^7.26.9",
+    "@babel/preset-typescript": "^7.27.0",
+    "@types/node": "^22.13.13",
+    "@vitest/coverage-istanbul": "^3.0.9",
     "eslint": "^8.45.0",
-    "eslint-import-resolver-typescript": "^3.5.5",
-    "eslint-plugin-import-x": "^4.3.0",
-    "husky": "^9.1.6",
-    "typescript": "^5.6.2",
-    "vitest": "^2.1.1"
+    "eslint-import-resolver-typescript": "^3.9.1",
+    "eslint-plugin-import-x": "^4.9.3",
+    "husky": "^9.1.7",
+    "typescript": "~5.5.4",
+    "vitest": "^3.0.9"
   },
   "babel": {
     "extends": "bitumen/configuration/babel"

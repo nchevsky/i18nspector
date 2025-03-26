@@ -130,13 +130,17 @@ $ npx i18nspector --resourcePaths=<path>,… [--resourceExtensions=<extension>,�
 
 💡 Strings tagged with `i18nspector-ignore` directives are exempt from reference checking and won't be reported as orphaned when no references to them can be found in source code.
 
-📍 `./examples/translations/ko.json`
-```json
-{
-  "bar": "바",
-  "foo": "푸"
-}
+📍 `./examples/translations/ko.properties`
+```properties
+bar=바
+foo=푸
+# i18nspector-ignore-begin
+ignored-block-line-1=ignored
+ignored-block-line-2=ignored
+# i18nspector-ignore-end
 ```
+
+💡 Properties files only support block—not line—ignore directives.
 
 ## Untranslated, orphaned, and unknown strings
 

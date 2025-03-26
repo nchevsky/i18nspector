@@ -37,7 +37,7 @@ export function log(message: string, severity: 'debug' | 'error' | 'info' = 'inf
 }
 
 export function nameMatchesExtensions(fileName: string, extensions: Array<string>) {
-  return extensions.some((extension) => fileName.endsWith(extension));
+  return extensions.some((extension) => fileName.endsWith(extension) && !fileName.endsWith(`.d${extension}`));
 }
 
 /**

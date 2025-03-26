@@ -1,6 +1,6 @@
 import base from 'bitumen/configuration/vitest';
 
-/** @type {import('vitest/config').UserConfig} */
+/** @type {import('vitest/config').ViteUserConfig} */
 export default {
   ...base,
   test: {

@@ -1,10 +1,10 @@
 import {readFile} from 'node:fs/promises';
 
-import {type ASTNode, type namedTypes as ASTTypes, builders, visit} from 'ast-types';
+import {type ASTNode, builders, type namedTypes as ASTTypes, visit} from 'ast-types';
 import type * as ASTKinds from 'ast-types/lib/gen/kinds'; // eslint-disable-line import-x/no-namespace
 import type {NodePath} from 'ast-types/lib/node-path';
 import {parse} from 'recast';
-import parser from 'recast/parsers/babel-ts.js'; // eslint-disable-line import-x/default
+import * as parser from 'recast/parsers/babel-ts.js'; // eslint-disable-line import-x/no-namespace
 
 import {
   IGNORE_DIRECTIVE, directoryEntries, formatCount, log, nameMatchesExtensions, permutate, pluralize
